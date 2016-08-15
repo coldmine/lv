@@ -22,7 +22,7 @@ func main() {
 
 		var width, height int
 		var tex screen.Texture
-		imgpath := os.Getenv("GOPATH") + "/src/github.com/coldmine/lv/sample/colorbar.png"
+		imgpath := "sample/colorbar.png"
 		img, err := loadImage(imgpath)
 		if err != nil {
 			log.Fatal(err)
