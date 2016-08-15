@@ -19,7 +19,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	defer f.Close()
 	sizeByte := make([]byte, 4)
 	_, err = f.Read(sizeByte)
 	if err != nil {
