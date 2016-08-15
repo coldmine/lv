@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	_ "bytes"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -15,7 +15,7 @@ type Atom struct {
 }
 
 func main() {
-	f, err := os.Open("prores422hq.mov")
+	f, err := os.Open("m4x4_prores422hq.mov")
 	if err != nil {
 		log.Fatal(err)
 	}
