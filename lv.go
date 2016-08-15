@@ -11,6 +11,9 @@ import "golang.org/x/mobile/event/lifecycle"
 import "golang.org/x/mobile/event/size"
 import "golang.org/x/mobile/event/paint"
 import "golang.org/x/mobile/event/key"
+import "golang.org/x/image/font"
+import "golang.org/x/image/font/inconsolata"
+import "golang.org/x/image/math/fixed"
 
 func main() {
 	driver.Main(func(s screen.Screen) {
@@ -56,6 +59,16 @@ func main() {
 				}
 				m := buf.RGBA()
 				draw.Copy(m, image.Point{}, img, img.Bounds(), draw.Src, nil)
+				d := font.Drawer{
+					Dst:  m,
+					Src:  image.Black,
+					Face: inconsolata.Regular8x16,
+					Dot: fixed.Point26_6{
+						Y: inconsolata.Regular8x16.Metrics().Ascent,
+					},
+				}
+				d.DrawString("this is sub-title.")
+
 				tex.Upload(image.Point{}, buf, m.Bounds())
 				buf.Release()
 
