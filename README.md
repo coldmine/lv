@@ -1,4 +1,5 @@
 # lv
+lv is light viewer.
 
 ### Requirement
 #### Linux
