@@ -16,11 +16,13 @@ type Atom struct {
 func main() {
 	atoms := make([]Atom, 0)
 
-	pth := "prores422hq.mov"
+	pth := "m4x4_prores422hq.mov"
 	f, err := os.Open(pth)
 	if err != nil {
 		log.Fatal("Could not open file: ", err)
 	}
+	defer f.Close()
+
 	fi, err := os.Stat(pth)
 	if err != nil {
 		log.Fatal("Could not get file info: ", err)
