@@ -5,6 +5,5 @@ lv is light viewer.
 #### Linux
 
 #### OSX
-- XQuartz : https://www.xquartz.org
 
 #### Windows
