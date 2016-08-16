@@ -46,8 +46,8 @@ func main() {
 		atoms = append(atoms, Atom{size: n, typ: t})
 
 		// seek next atom
-		atomOffset := len(sizeByte) + len(typeByte)
-		offset, err := f.Seek(int64(n-atomOffset),1)
+		readAlready := len(sizeByte) + len(typeByte)
+		offset, err := f.Seek(int64(n-readAlready),1)
 		if offset == fi.Size() {
 			// reached at EOF
 			break
