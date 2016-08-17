@@ -1,9 +1,2 @@
-# lv
-lv is light viewer.
-
-### Requirement
-#### Linux
-
-#### OSX
-
-#### Windows
+# LV
+Lv is light viewer.
