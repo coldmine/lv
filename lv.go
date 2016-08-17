@@ -25,6 +25,7 @@ func main() {
 
 		var width, height int
 		var tex screen.Texture
+		var subTex screen.Texture // for subtitle
 		imgpath := "sample/colorbar.png"
 		img, err := loadImage(imgpath)
 		if err != nil {
@@ -47,6 +48,7 @@ func main() {
 				width = e.WidthPx
 				height = e.HeightPx
 
+				// Upload image texture
 				t, err := s.NewTexture(image.Point{width, height})
 				if err != nil {
 					log.Fatal(err)
@@ -57,23 +59,36 @@ func main() {
 					tex.Release()
 					log.Fatal(err)
 				}
-				m := buf.RGBA()
-				draw.Copy(m, image.Point{}, img, img.Bounds(), draw.Src, nil)
+				rgba := buf.RGBA()
+				draw.Copy(rgba, image.Point{}, img, img.Bounds(), draw.Src, nil)
+				tex.Upload(image.Point{}, buf, rgba.Bounds())
+				buf.Release()
+
+				// Upload subtitle texture
+				//
+				// TODO: Fit texture size to subtitle. Could I know the size already?
+				t, err = s.NewTexture(image.Point{width, height})
+				if err != nil {
+					log.Fatal(err)
+				}
+				subTex = t
+				subBuf, err := s.NewBuffer(image.Point{width, height})
+				subRgba := subBuf.RGBA()
 				d := font.Drawer{
-					Dst:  m,
+					Dst:  subRgba,
 					Src:  image.Black,
 					Face: inconsolata.Regular8x16,
 					Dot: fixed.Point26_6{
 						Y: inconsolata.Regular8x16.Metrics().Ascent,
 					},
 				}
-				d.DrawString("this is sub-title.")
-
-				tex.Upload(image.Point{}, buf, m.Bounds())
-				buf.Release()
+				d.DrawString("this is a sub-title.")
+				subTex.Upload(image.Point{}, subBuf, subRgba.Bounds())
+				subBuf.Release()
 
 			case paint.Event:
 				w.Copy(image.Point{}, tex, image.Rect(0, 0, width, height), screen.Src, nil)
+				w.Copy(image.Point{500, 500}, subTex, image.Rect(0, 0, width, height), screen.Over, nil)
 				w.Publish()
 			}
 		}
