@@ -28,8 +28,8 @@ func main() {
 		}
 		defer w.Release()
 
-		startOrStopChan := make(chan bool)
-		playTime := playTimer(w, startOrStopChan)
+		playPauseSwitch := make(chan bool)
+		playTime := playTimer(w, playPauseSwitch)
 
 		imgpath := "sample/colorbar.png"
 		img, err := loadImage(imgpath)
@@ -50,7 +50,7 @@ func main() {
 					return
 				}
 				if e.Code == key.CodeSpacebar && e.Direction == key.DirPress {
-					startOrStopChan <- true
+					playPauseSwitch <- true
 				}
 
 			case paint.Event:
@@ -123,7 +123,7 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 	return tex
 }
 
-func playTimer(w screen.Window, playOrStop <-chan bool) <-chan time.Duration {
+func playTimer(w screen.Window, playPauseSwitch <-chan bool) <-chan time.Duration {
 	playTime := make(chan time.Duration)
 	go func() {
 		playing := true
@@ -131,7 +131,7 @@ func playTimer(w screen.Window, playOrStop <-chan bool) <-chan time.Duration {
 		d := time.Duration(0)
 		for {
 			select {
-			case <-playOrStop:
+			case <-playPauseSwitch:
 				if playing {
 					playing = false
 					d += time.Since(start)
