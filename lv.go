@@ -4,6 +4,7 @@ import "os"
 import "log"
 import "fmt"
 import "time"
+import "strings"
 import "image"
 import _ "image/png"
 import "golang.org/x/image/draw"
@@ -25,9 +26,6 @@ func main() {
 		}
 		defer w.Release()
 
-		var width, height int
-		var tex screen.Texture
-
 		startOrStopChan := make(chan bool)
 		durationChan := make(chan time.Duration)
 		go playTimeChecker(w, startOrStopChan, durationChan)
@@ -37,22 +35,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		// Upload image texture
-		t, err := s.NewTexture(img.Bounds().Max)
-		if err != nil {
-			log.Fatal(err)
-		}
-		tex = t
-		buf, err := s.NewBuffer(img.Bounds().Max)
-		if err != nil {
-			tex.Release()
-			log.Fatal(err)
-		}
-		rgba := buf.RGBA()
-		draw.Copy(rgba, image.Point{}, img, img.Bounds(), draw.Src, nil)
-		tex.Upload(image.Point{}, buf, rgba.Bounds())
-		buf.Release()
+		tex := imageTexture(s, img)
 
 		for {
 			switch e := w.NextEvent().(type) {
@@ -69,41 +52,61 @@ func main() {
 					startOrStopChan <- true
 				}
 
-			case size.Event:
-				width = e.WidthPx
-				height = e.HeightPx
-
 			case paint.Event:
-				// Upload subtitle texture
-				//
-				// TODO: Fit texture size to subtitle. Could I know the size already?
-				subTex, err := s.NewTexture(image.Point{width, height})
-				if err != nil {
-					log.Fatal(err)
-				}
-				subBuf, err := s.NewBuffer(image.Point{width, height})
-				if err != nil {
-					log.Fatal(err)
-				}
-				subRgba := subBuf.RGBA()
-				drawer := font.Drawer{
-					Dst:  subRgba,
-					Src:  image.Black,
-					Face: inconsolata.Regular8x16,
-					Dot: fixed.Point26_6{
-						Y: inconsolata.Regular8x16.Metrics().Ascent,
-					},
-				}
-				drawer.DrawString(fmt.Sprintf("play time: %v", <-durationChan))
-				subTex.Upload(image.Point{}, subBuf, subRgba.Bounds())
-				subBuf.Release()
+				subTex := subtitleTexture(s, fmt.Sprintf("play time: %v", <-durationChan))
 
-				w.Copy(image.Point{}, tex, img.Bounds(), screen.Src, nil)
-				w.Copy(image.Point{500, 500}, subTex, image.Rect(0, 0, width, 100), screen.Over, nil)
+				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
+				w.Copy(image.Point{500, 500}, subTex, subTex.Bounds(), screen.Over, nil)
 				w.Publish()
 			}
 		}
 	})
+}
+
+func imageTexture(s screen.Screen, img image.Image) screen.Texture {
+	tex, err := s.NewTexture(img.Bounds().Max)
+	if err != nil {
+		log.Fatal(err)
+	}
+	buf, err := s.NewBuffer(img.Bounds().Max)
+	if err != nil {
+		tex.Release()
+		log.Fatal(err)
+	}
+	rgba := buf.RGBA()
+	draw.Copy(rgba, image.Point{}, img, img.Bounds(), draw.Src, nil)
+	tex.Upload(image.Point{}, buf, rgba.Bounds())
+	buf.Release()
+
+	return tex
+}
+
+func subtitleTexture(s screen.Screen, tx string) screen.Texture {
+	width := 8 * len(tx) // is it equal to unicode len?
+	height := 16 * len(strings.Split(tx, "\n"))
+
+	tex, err := s.NewTexture(image.Point{width, height})
+	if err != nil {
+		log.Fatal(err)
+	}
+	buf, err := s.NewBuffer(image.Point{width, height})
+	if err != nil {
+		log.Fatal(err)
+	}
+	rgba := buf.RGBA()
+	drawer := font.Drawer{
+		Dst:  rgba,
+		Src:  image.Black,
+		Face: inconsolata.Regular8x16,
+		Dot: fixed.Point26_6{
+			Y: inconsolata.Regular8x16.Metrics().Ascent,
+		},
+	}
+	drawer.DrawString(tx)
+	tex.Upload(image.Point{}, buf, rgba.Bounds())
+	buf.Release()
+
+	return tex
 }
 
 func playTimeChecker(w screen.Window, playOrStop <-chan bool, duration chan<- time.Duration) {
