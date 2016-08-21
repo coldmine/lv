@@ -29,8 +29,7 @@ func main() {
 		defer w.Release()
 
 		startOrStopChan := make(chan bool)
-		durationChan := make(chan time.Duration)
-		go playTimeChecker(w, startOrStopChan, durationChan)
+		playTime := playTimer(w, startOrStopChan)
 
 		imgpath := "sample/colorbar.png"
 		img, err := loadImage(imgpath)
@@ -55,7 +54,7 @@ func main() {
 				}
 
 			case paint.Event:
-				subTex := subtitleTexture(s, fmt.Sprintf("play time: %v\n\ncheck bounds", <-durationChan))
+				subTex := subtitleTexture(s, fmt.Sprintf("play time: %v\n\ncheck bounds", <-playTime))
 
 				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
 				w.Copy(image.Point{500, 500}, subTex, subTex.Bounds(), screen.Over, nil)
@@ -124,30 +123,34 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 	return tex
 }
 
-func playTimeChecker(w screen.Window, playOrStop <-chan bool, duration chan<- time.Duration) {
-	playing := true
-	startTime := time.Now()
-	d := time.Duration(0)
-	for {
-		select {
-		case <-playOrStop:
-			if playing {
-				playing = false
-				d += time.Since(startTime)
-			} else {
-				playing = true
-				startTime = time.Now()
-			}
-		case <-time.After(time.Second / 24):
-			if playing {
-				w.Send(paint.Event{})
-				duration <- d + time.Since(startTime)
-			} else {
-				w.Send(paint.Event{})
-				duration <- d
+func playTimer(w screen.Window, playOrStop <-chan bool) <-chan time.Duration {
+	playTime := make(chan time.Duration)
+	go func() {
+		playing := true
+		start := time.Now()
+		d := time.Duration(0)
+		for {
+			select {
+			case <-playOrStop:
+				if playing {
+					playing = false
+					d += time.Since(start)
+				} else {
+					playing = true
+					start = time.Now()
+				}
+			case <-time.After(time.Second / 24):
+				if playing {
+					w.Send(paint.Event{})
+					playTime <- d + time.Since(start)
+				} else {
+					w.Send(paint.Event{})
+					playTime <- d
+				}
 			}
 		}
-	}
+	}()
+	return playTime
 }
 
 func loadImage(pth string) (image.Image, error) {
