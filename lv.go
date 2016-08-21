@@ -5,13 +5,15 @@ import "log"
 import "fmt"
 import "time"
 import "strings"
+import "unicode/utf8"
 import "image"
 import _ "image/png"
 import "golang.org/x/image/draw"
 import "golang.org/x/exp/shiny/driver"
 import "golang.org/x/exp/shiny/screen"
 import "golang.org/x/mobile/event/lifecycle"
-import "golang.org/x/mobile/event/size"
+
+// import "golang.org/x/mobile/event/size"
 import "golang.org/x/mobile/event/paint"
 import "golang.org/x/mobile/event/key"
 import "golang.org/x/image/font"
@@ -53,7 +55,7 @@ func main() {
 				}
 
 			case paint.Event:
-				subTex := subtitleTexture(s, fmt.Sprintf("play time: %v", <-durationChan))
+				subTex := subtitleTexture(s, fmt.Sprintf("play time: %v\n\ncheck bounds", <-durationChan))
 
 				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
 				w.Copy(image.Point{500, 500}, subTex, subTex.Bounds(), screen.Over, nil)
@@ -82,8 +84,15 @@ func imageTexture(s screen.Screen, img image.Image) screen.Texture {
 }
 
 func subtitleTexture(s screen.Screen, tx string) screen.Texture {
-	width := 8 * len(tx) // is it equal to unicode len?
-	height := 16 * len(strings.Split(tx, "\n"))
+	lines := strings.Split(tx, "\n")
+	width := 0
+	for _, l := range lines {
+		w := 8 * utf8.RuneCountInString(l)
+		if w > width {
+			width = w
+		}
+	}
+	height := 16 * len(lines)
 
 	tex, err := s.NewTexture(image.Point{width, height})
 	if err != nil {
@@ -94,6 +103,7 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 		log.Fatal(err)
 	}
 	rgba := buf.RGBA()
+
 	drawer := font.Drawer{
 		Dst:  rgba,
 		Src:  image.Black,
@@ -102,7 +112,12 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 			Y: inconsolata.Regular8x16.Metrics().Ascent,
 		},
 	}
-	drawer.DrawString(tx)
+	for _, l := range lines {
+		drawer.DrawString(l)
+		drawer.Dot.X = 0
+		drawer.Dot.Y += fixed.I(16)
+	}
+
 	tex.Upload(image.Point{}, buf, rgba.Bounds())
 	buf.Release()
 
