@@ -4,6 +4,7 @@ import "os"
 import "log"
 import "fmt"
 import "time"
+import "path/filepath"
 import "strings"
 import "unicode/utf8"
 import "image"
@@ -12,8 +13,7 @@ import "golang.org/x/image/draw"
 import "golang.org/x/exp/shiny/driver"
 import "golang.org/x/exp/shiny/screen"
 import "golang.org/x/mobile/event/lifecycle"
-
-// import "golang.org/x/mobile/event/size"
+import "golang.org/x/mobile/event/size"
 import "golang.org/x/mobile/event/paint"
 import "golang.org/x/mobile/event/key"
 import "golang.org/x/image/font"
@@ -22,7 +22,27 @@ import "golang.org/x/image/math/fixed"
 
 func main() {
 	driver.Main(func(s screen.Screen) {
-		w, err := s.NewWindow(nil)
+		// Find movie/sequence.
+		//
+		// TODO: User input.
+		seq, err := filepath.Glob("sample/pngseq/pngseq.*.png")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if seq == nil {
+			log.Print("no input movie or sequence")
+			os.Exit(1)
+		}
+
+		// Get initial size.
+		firstImage, err := loadImage(seq[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		initSize := firstImage.Bounds().Max
+
+		// Make a window.
+		w, err := s.NewWindow(&screen.NewWindowOptions{Width: initSize.X, Height: initSize.Y})
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -31,13 +51,10 @@ func main() {
 		playPauseSwitch := make(chan bool)
 		playTime := playTimer(w, playPauseSwitch)
 
-		imgpath := "sample/colorbar.png"
-		img, err := loadImage(imgpath)
-		if err != nil {
-			log.Fatal(err)
-		}
-		tex := imageTexture(s, img)
+		// Keep textures so we can reuse it. (ex: play loop)
+		texs := make([]screen.Texture, len(seq))
 
+		i := 0
 		for {
 			switch e := w.NextEvent().(type) {
 			case lifecycle.Event:
@@ -53,11 +70,29 @@ func main() {
 					playPauseSwitch <- true
 				}
 
+			case size.Event:
+
 			case paint.Event:
+				// TODO: Texture keep changing, even if I stop play. Fix it.
+				var tex screen.Texture
+				if i < len(seq) {
+					img, err := loadImage(seq[i])
+					if err != nil {
+						log.Fatal(err)
+					}
+					t := imageTexture(s, img)
+					tex = t
+					texs[i] = t
+				} else {
+					// loop
+					tex = texs[i%len(seq)]
+				}
+				i++
+
 				subTex := subtitleTexture(s, fmt.Sprintf("play time: %v\n\ncheck bounds", <-playTime))
 
 				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
-				w.Copy(image.Point{500, 500}, subTex, subTex.Bounds(), screen.Over, nil)
+				w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
 				w.Publish()
 			}
 		}
@@ -105,7 +140,7 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 
 	drawer := font.Drawer{
 		Dst:  rgba,
-		Src:  image.Black,
+		Src:  image.White,
 		Face: inconsolata.Regular8x16,
 		Dot: fixed.Point26_6{
 			Y: inconsolata.Regular8x16.Metrics().Ascent,
