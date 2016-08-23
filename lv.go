@@ -54,7 +54,6 @@ func main() {
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
 
-		i := 0
 		for {
 			switch e := w.NextEvent().(type) {
 			case lifecycle.Event:
@@ -73,23 +72,23 @@ func main() {
 			case size.Event:
 
 			case paint.Event:
-				// TODO: Texture keep changing, even if I stop play. Fix it.
+				t := float64(<-playTime) / float64(time.Second)
+				f := int(t*24) % len(seq)
+
 				var tex screen.Texture
-				if i < len(seq) {
-					img, err := loadImage(seq[i])
+				if texs[f] == nil {
+					img, err := loadImage(seq[f])
 					if err != nil {
 						log.Fatal(err)
 					}
-					t := imageTexture(s, img)
-					tex = t
-					texs[i] = t
+					tex = imageTexture(s, img)
+					texs[f] = tex
 				} else {
 					// loop
-					tex = texs[i%len(seq)]
+					tex = texs[f]
 				}
-				i++
 
-				subTex := subtitleTexture(s, fmt.Sprintf("play time: %v\n\ncheck bounds", <-playTime))
+				subTex := subtitleTexture(s, fmt.Sprintf("play time: %v\n\ncheck bounds", t))
 
 				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
 				w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
