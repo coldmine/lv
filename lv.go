@@ -20,6 +20,15 @@ import "golang.org/x/image/font"
 import "golang.org/x/image/font/inconsolata"
 import "golang.org/x/image/math/fixed"
 
+type event int
+
+const (
+	unknownEvent = event(iota)
+	playPauseEvent
+	seekNextEvent
+	seekPrevEvent
+)
+
 func main() {
 	driver.Main(func(s screen.Screen) {
 		// Find movie/sequence.
@@ -48,8 +57,8 @@ func main() {
 		}
 		defer w.Release()
 
-		playPauseSwitch := make(chan bool)
-		playFrame := playFramer(24, len(seq), w, playPauseSwitch)
+		playEventChan := make(chan event)
+		playFrame := playFramer(24, len(seq), w, playEventChan)
 
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
@@ -66,7 +75,7 @@ func main() {
 					return
 				}
 				if e.Code == key.CodeSpacebar && e.Direction == key.DirPress {
-					playPauseSwitch <- true
+					playEventChan <- playPauseEvent
 				}
 
 			case size.Event:
@@ -157,7 +166,7 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 }
 
 // playFramer return playFrame channel that sends which frame should played at the time.
-func playFramer(fps float64, endFrame int, w screen.Window, playPauseSwitch <-chan bool) <-chan int {
+func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event) <-chan int {
 	playFrame := make(chan int)
 	go func() {
 		playing := true
@@ -165,13 +174,16 @@ func playFramer(fps float64, endFrame int, w screen.Window, playPauseSwitch <-ch
 		d := time.Duration(0)
 		for {
 			select {
-			case <-playPauseSwitch:
-				if playing {
-					playing = false
-					d += time.Since(start)
-				} else {
-					playing = true
-					start = time.Now()
+			case ev := <-eventCh:
+				switch ev {
+				case playPauseEvent:
+					if playing {
+						playing = false
+						d += time.Since(start)
+					} else {
+						playing = true
+						start = time.Now()
+					}
 				}
 			case <-time.After(time.Second / time.Duration(fps)):
 				var t time.Duration
