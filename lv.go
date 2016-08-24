@@ -58,7 +58,7 @@ func main() {
 		defer w.Release()
 
 		playEventChan := make(chan event)
-		playFrame := playFramer(24, len(seq), w, playEventChan)
+		playFrame := playFramer(24, len(seq)-1, w, playEventChan)
 
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
@@ -76,6 +76,12 @@ func main() {
 				}
 				if e.Code == key.CodeSpacebar && e.Direction == key.DirPress {
 					playEventChan <- playPauseEvent
+				}
+				if e.Code == key.CodeLeftArrow && e.Direction == key.DirPress {
+					playEventChan <- seekPrevEvent
+				}
+				if e.Code == key.CodeRightArrow && e.Direction == key.DirPress {
+					playEventChan <- seekNextEvent
 				}
 
 			case size.Event:
@@ -187,6 +193,16 @@ func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event
 					} else {
 						playing = true
 						start = time.Now()
+					}
+				case seekPrevEvent:
+					d -= 1
+					if d < 0 {
+						d = 0
+					}
+				case seekNextEvent:
+					d += 1
+					if d > endTime {
+						d = endTime
 					}
 				}
 			case <-time.After(time.Second / time.Duration(fps)):
