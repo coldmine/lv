@@ -169,9 +169,10 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event) <-chan int {
 	playFrame := make(chan int)
 	go func() {
+		endTime := float64(endFrame) / fps
 		playing := true
 		start := time.Now()
-		d := time.Duration(0)
+		var d float64
 		for {
 			select {
 			case ev := <-eventCh:
@@ -179,26 +180,36 @@ func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event
 				case playPauseEvent:
 					if playing {
 						playing = false
-						d += time.Since(start)
+						d += time.Since(start).Seconds()
+						if d > endTime {
+							d = modFloat(d, endTime)
+						}
 					} else {
 						playing = true
 						start = time.Now()
 					}
 				}
 			case <-time.After(time.Second / time.Duration(fps)):
-				var t time.Duration
+				w.Send(paint.Event{})
+				var t float64
 				if playing {
-					w.Send(paint.Event{})
-					t = d + time.Since(start)
+					t = d + time.Since(start).Seconds()
+					if t > endTime {
+						t = modFloat(t, endTime)
+					}
 				} else {
-					w.Send(paint.Event{})
 					t = d
 				}
-				playFrame <- int(t.Seconds()*fps) % endFrame
+				playFrame <- int(t * fps)
 			}
 		}
 	}()
 	return playFrame
+}
+
+func modFloat(f, m float64) float64 {
+	d := int(f / m)
+	return f - m*float64(d)
 }
 
 func loadImage(pth string) (image.Image, error) {
