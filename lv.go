@@ -49,7 +49,7 @@ func main() {
 		defer w.Release()
 
 		playPauseSwitch := make(chan bool)
-		playTime := playTimer(w, playPauseSwitch)
+		playFrame := playFramer(24, len(seq), w, playPauseSwitch)
 
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
@@ -72,8 +72,7 @@ func main() {
 			case size.Event:
 
 			case paint.Event:
-				t := float64(<-playTime) / float64(time.Second)
-				f := int(t*24) % len(seq)
+				f := <-playFrame
 
 				var tex screen.Texture
 				if texs[f] == nil {
@@ -88,7 +87,7 @@ func main() {
 					tex = texs[f]
 				}
 
-				subTex := subtitleTexture(s, fmt.Sprintf("play time: %v\n\ncheck bounds", t))
+				subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\ncheck bounds", f))
 
 				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
 				w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
@@ -157,8 +156,9 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 	return tex
 }
 
-func playTimer(w screen.Window, playPauseSwitch <-chan bool) <-chan time.Duration {
-	playTime := make(chan time.Duration)
+// playFramer return playFrame channel that sends which frame should played at the time.
+func playFramer(fps float64, endFrame int, w screen.Window, playPauseSwitch <-chan bool) <-chan int {
+	playFrame := make(chan int)
 	go func() {
 		playing := true
 		start := time.Now()
@@ -173,18 +173,20 @@ func playTimer(w screen.Window, playPauseSwitch <-chan bool) <-chan time.Duratio
 					playing = true
 					start = time.Now()
 				}
-			case <-time.After(time.Second / 24):
+			case <-time.After(time.Second / time.Duration(fps)):
+				var t time.Duration
 				if playing {
 					w.Send(paint.Event{})
-					playTime <- d + time.Since(start)
+					t = d + time.Since(start)
 				} else {
 					w.Send(paint.Event{})
-					playTime <- d
+					t = d
 				}
+				playFrame <- int(t.Seconds()*fps) % endFrame
 			}
 		}
 	}()
-	return playTime
+	return playFrame
 }
 
 func loadImage(pth string) (image.Image, error) {
