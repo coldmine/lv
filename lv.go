@@ -27,6 +27,8 @@ const (
 	playPauseEvent
 	seekNextEvent
 	seekPrevEvent
+	seekNextFrameEvent
+	seekPrevFrameEvent
 )
 
 func main() {
@@ -82,6 +84,12 @@ func main() {
 				}
 				if e.Code == key.CodeRightArrow && e.Direction == key.DirPress {
 					playEventChan <- seekNextEvent
+				}
+				if e.Rune == ',' && e.Direction == key.DirPress {
+					playEventChan <- seekPrevFrameEvent
+				}
+				if e.Rune == '.' && e.Direction == key.DirPress {
+					playEventChan <- seekNextFrameEvent
 				}
 
 			case size.Event:
@@ -184,6 +192,9 @@ func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event
 			case ev := <-eventCh:
 				if playing {
 					d += time.Since(start).Seconds()
+					if d > endTime {
+						d = modFloat(d, endTime)
+					}
 				}
 				start = time.Now()
 
@@ -191,9 +202,6 @@ func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event
 				case playPauseEvent:
 					if playing {
 						playing = false
-						if d > endTime {
-							d = modFloat(d, endTime)
-						}
 					} else {
 						playing = true
 					}
@@ -204,6 +212,20 @@ func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event
 					}
 				case seekNextEvent:
 					d += 1
+					if d > endTime {
+						d = endTime
+					}
+				case seekPrevFrameEvent:
+					// when seeking frames, player should stop.
+					playing = false
+					d -= 1 / fps
+					if d < 0 {
+						d = 0
+					}
+				case seekNextFrameEvent:
+					// when seeking frames, player should stop.
+					playing = false
+					d += 1 / fps
 					if d > endTime {
 						d = endTime
 					}
