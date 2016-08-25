@@ -27,6 +27,8 @@ const (
 	playPauseEvent
 	seekNextEvent
 	seekPrevEvent
+	seekNextFrameEvent
+	seekPrevFrameEvent
 )
 
 func main() {
@@ -82,6 +84,12 @@ func main() {
 				}
 				if e.Code == key.CodeRightArrow && e.Direction == key.DirPress {
 					playEventChan <- seekNextEvent
+				}
+				if e.Rune == ',' && e.Direction == key.DirPress {
+					playEventChan <- seekPrevFrameEvent
+				}
+				if e.Rune == '.' && e.Direction == key.DirPress {
+					playEventChan <- seekNextFrameEvent
 				}
 
 			case size.Event:
@@ -175,57 +183,68 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event) <-chan int {
 	playFrame := make(chan int)
 	go func() {
-		endTime := float64(endFrame) / fps
 		playing := true
 		start := time.Now()
-		var d float64
+		var f int
 		for {
 			select {
 			case ev := <-eventCh:
+				if playing {
+					f += int(time.Since(start).Seconds() * fps)
+					if f > endFrame {
+						f %= endFrame
+					}
+				}
+				start = time.Now()
+
 				switch ev {
 				case playPauseEvent:
 					if playing {
 						playing = false
-						d += time.Since(start).Seconds()
-						if d > endTime {
-							d = modFloat(d, endTime)
-						}
 					} else {
 						playing = true
-						start = time.Now()
 					}
 				case seekPrevEvent:
-					d -= 1
-					if d < 0 {
-						d = 0
+					f -= int(fps) // TODO: rounding for non-integer fps
+					if f < 0 {
+						f = 0
 					}
 				case seekNextEvent:
-					d += 1
-					if d > endTime {
-						d = endTime
+					f += int(fps) // TODO: rounding for non-integer fps
+					if f > endFrame {
+						f = endFrame
+					}
+				case seekPrevFrameEvent:
+					// when seeking frames, player should stop.
+					playing = false
+					f -= 1
+					if f < 0 {
+						f = 0
+					}
+				case seekNextFrameEvent:
+					// when seeking frames, player should stop.
+					playing = false
+					f += 1
+					if f > endFrame {
+						f = endFrame
 					}
 				}
 			case <-time.After(time.Second / time.Duration(fps)):
 				w.Send(paint.Event{})
-				var t float64
+				var tf int
 				if playing {
-					t = d + time.Since(start).Seconds()
-					if t > endTime {
-						t = modFloat(t, endTime)
+					tf = f + int(time.Since(start).Seconds()*fps)
+					if tf > endFrame {
+						tf %= endFrame
 					}
 				} else {
-					t = d
+					tf = f
 				}
-				playFrame <- int(t * fps)
+				playFrame <- tf
 			}
 		}
 	}()
 	return playFrame
-}
-
-func modFloat(f, m float64) float64 {
-	d := int(f / m)
-	return f - m*float64(d)
 }
 
 func loadImage(pth string) (image.Image, error) {
