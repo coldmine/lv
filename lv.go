@@ -182,17 +182,20 @@ func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event
 		for {
 			select {
 			case ev := <-eventCh:
+				if playing {
+					d += time.Since(start).Seconds()
+				}
+				start = time.Now()
+
 				switch ev {
 				case playPauseEvent:
 					if playing {
 						playing = false
-						d += time.Since(start).Seconds()
 						if d > endTime {
 							d = modFloat(d, endTime)
 						}
 					} else {
 						playing = true
-						start = time.Now()
 					}
 				case seekPrevEvent:
 					d -= 1
