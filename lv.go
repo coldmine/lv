@@ -9,6 +9,7 @@ import "strings"
 import "unicode/utf8"
 import "image"
 import _ "image/png"
+import "image/color"
 import "golang.org/x/image/draw"
 import "golang.org/x/exp/shiny/driver"
 import "golang.org/x/exp/shiny/screen"
@@ -51,9 +52,11 @@ func main() {
 			log.Fatal(err)
 		}
 		initSize := firstImage.Bounds().Max
+		width := initSize.X
+		height := initSize.Y
 
 		// Make a window.
-		w, err := s.NewWindow(&screen.NewWindowOptions{Width: initSize.X, Height: initSize.Y})
+		w, err := s.NewWindow(&screen.NewWindowOptions{Width: width, Height: height})
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -93,6 +96,7 @@ func main() {
 				}
 
 			case size.Event:
+				width, height = e.WidthPx, e.HeightPx
 
 			case paint.Event:
 				f := <-playFrame
@@ -109,11 +113,12 @@ func main() {
 					// loop
 					tex = texs[f]
 				}
-
 				subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\ncheck bounds", f))
+				playbarTex := playbarTexture(s, width, 10, f, len(seq))
 
 				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
 				w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
+				w.Copy(image.Point{0, height - 10}, playbarTex, playbarTex.Bounds(), screen.Src, nil)
 				w.Publish()
 			}
 		}
@@ -172,6 +177,34 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 		drawer.Dot.X = 0
 		drawer.Dot.Y += fixed.I(16)
 	}
+
+	tex.Upload(image.Point{}, buf, rgba.Bounds())
+	buf.Release()
+
+	return tex
+}
+
+func playbarTexture(s screen.Screen, width, height, frame, lenSeq int) screen.Texture {
+	tex, err := s.NewTexture(image.Point{width, height})
+	if err != nil {
+		log.Fatal(err)
+	}
+	buf, err := s.NewBuffer(image.Point{width, height})
+	if err != nil {
+		log.Fatal(err)
+	}
+	rgba := buf.RGBA()
+
+	// Draw background
+	gray := color.Gray{64}
+	draw.Copy(rgba, image.Point{}, image.NewUniform(gray), image.Rect(0, 0, width, height), draw.Src, nil)
+
+	// Draw cursor
+	yellow := color.RGBA{R: 255, G: 255, B: 0, A: 255}
+	cs := int(float64(width) * float64(frame) / float64(lenSeq))
+	cw := int(float64(width) / float64(lenSeq))
+	cw++ // Integer represention of width shrinks. Draw one pixel larger always.
+	draw.Copy(rgba, image.Pt(cs, 0), image.NewUniform(yellow), image.Rect(0, 0, cw, height), draw.Src, nil)
 
 	tex.Upload(image.Point{}, buf, rgba.Bounds())
 	buf.Release()
