@@ -9,6 +9,7 @@ import "strings"
 import "unicode/utf8"
 import "image"
 import _ "image/png"
+import "image/color"
 import "golang.org/x/image/draw"
 import "golang.org/x/exp/shiny/driver"
 import "golang.org/x/exp/shiny/screen"
@@ -27,6 +28,8 @@ const (
 	playPauseEvent
 	seekNextEvent
 	seekPrevEvent
+	seekNextFrameEvent
+	seekPrevFrameEvent
 )
 
 func main() {
@@ -49,9 +52,11 @@ func main() {
 			log.Fatal(err)
 		}
 		initSize := firstImage.Bounds().Max
+		width := initSize.X
+		height := initSize.Y
 
 		// Make a window.
-		w, err := s.NewWindow(&screen.NewWindowOptions{Width: initSize.X, Height: initSize.Y})
+		w, err := s.NewWindow(&screen.NewWindowOptions{Width: width, Height: height})
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -83,8 +88,15 @@ func main() {
 				if e.Code == key.CodeRightArrow && e.Direction == key.DirPress {
 					playEventChan <- seekNextEvent
 				}
+				if e.Rune == ',' && e.Direction == key.DirPress {
+					playEventChan <- seekPrevFrameEvent
+				}
+				if e.Rune == '.' && e.Direction == key.DirPress {
+					playEventChan <- seekNextFrameEvent
+				}
 
 			case size.Event:
+				width, height = e.WidthPx, e.HeightPx
 
 			case paint.Event:
 				f := <-playFrame
@@ -101,11 +113,12 @@ func main() {
 					// loop
 					tex = texs[f]
 				}
-
 				subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\ncheck bounds", f))
+				playbarTex := playbarTexture(s, width, 10, f, len(seq))
 
 				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
 				w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
+				w.Copy(image.Point{0, height - 10}, playbarTex, playbarTex.Bounds(), screen.Src, nil)
 				w.Publish()
 			}
 		}
@@ -171,61 +184,100 @@ func subtitleTexture(s screen.Screen, tx string) screen.Texture {
 	return tex
 }
 
+func playbarTexture(s screen.Screen, width, height, frame, lenSeq int) screen.Texture {
+	tex, err := s.NewTexture(image.Point{width, height})
+	if err != nil {
+		log.Fatal(err)
+	}
+	buf, err := s.NewBuffer(image.Point{width, height})
+	if err != nil {
+		log.Fatal(err)
+	}
+	rgba := buf.RGBA()
+
+	// Draw background
+	gray := color.Gray{64}
+	draw.Copy(rgba, image.Point{}, image.NewUniform(gray), image.Rect(0, 0, width, height), draw.Src, nil)
+
+	// Draw cursor
+	yellow := color.RGBA{R: 255, G: 255, B: 0, A: 255}
+	cs := int(float64(width) * float64(frame) / float64(lenSeq))
+	cw := int(float64(width) / float64(lenSeq))
+	cw++ // Integer represention of width shrinks. Draw one pixel larger always.
+	draw.Copy(rgba, image.Pt(cs, 0), image.NewUniform(yellow), image.Rect(0, 0, cw, height), draw.Src, nil)
+
+	tex.Upload(image.Point{}, buf, rgba.Bounds())
+	buf.Release()
+
+	return tex
+}
+
 // playFramer return playFrame channel that sends which frame should played at the time.
 func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event) <-chan int {
 	playFrame := make(chan int)
 	go func() {
-		endTime := float64(endFrame) / fps
 		playing := true
 		start := time.Now()
-		var d float64
+		var f int
 		for {
 			select {
 			case ev := <-eventCh:
+				if playing {
+					f += int(time.Since(start).Seconds() * fps)
+					if f > endFrame {
+						f %= endFrame
+					}
+				}
+				start = time.Now()
+
 				switch ev {
 				case playPauseEvent:
 					if playing {
 						playing = false
-						d += time.Since(start).Seconds()
-						if d > endTime {
-							d = modFloat(d, endTime)
-						}
 					} else {
 						playing = true
-						start = time.Now()
 					}
 				case seekPrevEvent:
-					d -= 1
-					if d < 0 {
-						d = 0
+					f -= int(fps) // TODO: rounding for non-integer fps
+					if f < 0 {
+						f = 0
 					}
 				case seekNextEvent:
-					d += 1
-					if d > endTime {
-						d = endTime
+					f += int(fps) // TODO: rounding for non-integer fps
+					if f > endFrame {
+						f = endFrame
+					}
+				case seekPrevFrameEvent:
+					// when seeking frames, player should stop.
+					playing = false
+					f -= 1
+					if f < 0 {
+						f = 0
+					}
+				case seekNextFrameEvent:
+					// when seeking frames, player should stop.
+					playing = false
+					f += 1
+					if f > endFrame {
+						f = endFrame
 					}
 				}
 			case <-time.After(time.Second / time.Duration(fps)):
 				w.Send(paint.Event{})
-				var t float64
+				var tf int
 				if playing {
-					t = d + time.Since(start).Seconds()
-					if t > endTime {
-						t = modFloat(t, endTime)
+					tf = f + int(time.Since(start).Seconds()*fps)
+					if tf > endFrame {
+						tf %= endFrame
 					}
 				} else {
-					t = d
+					tf = f
 				}
-				playFrame <- int(t * fps)
+				playFrame <- tf
 			}
 		}
 	}()
 	return playFrame
-}
-
-func modFloat(f, m float64) float64 {
-	d := int(f / m)
-	return f - m*float64(d)
 }
 
 func loadImage(pth string) (image.Image, error) {
