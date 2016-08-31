@@ -21,6 +21,24 @@ import "golang.org/x/image/font"
 import "golang.org/x/image/font/inconsolata"
 import "golang.org/x/image/math/fixed"
 
+type playMode int
+
+const (
+	playRealTime = playMode(iota)
+	playEveryFrame
+)
+
+func (p playMode) String() string {
+	switch p {
+	case playRealTime:
+		return "playRealTime"
+	case playEveryFrame:
+		return "playEveryFrame"
+	default:
+		return "unknown"
+	}
+}
+
 type event int
 
 const (
@@ -30,6 +48,8 @@ const (
 	seekPrevEvent
 	seekNextFrameEvent
 	seekPrevFrameEvent
+	playRealTimeEvent
+	playEveryFrameEvent
 )
 
 func main() {
@@ -62,8 +82,9 @@ func main() {
 		}
 		defer w.Release()
 
+		mode := playRealTime
 		playEventChan := make(chan event)
-		playFrame := playFramer(24, len(seq)-1, w, playEventChan)
+		playFrame := playFramer(mode, 24, len(seq)-1, w, playEventChan)
 
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
@@ -94,6 +115,15 @@ func main() {
 				if e.Rune == '.' && e.Direction == key.DirPress {
 					playEventChan <- seekNextFrameEvent
 				}
+				if e.Rune == 'm' && e.Direction == key.DirPress {
+					if mode == playRealTime {
+						mode = playEveryFrame
+						playEventChan <- playEveryFrameEvent
+					} else {
+						mode = playRealTime
+						playEventChan <- playRealTimeEvent
+					}
+				}
 
 			case size.Event:
 				width, height = e.WidthPx, e.HeightPx
@@ -113,7 +143,7 @@ func main() {
 					// loop
 					tex = texs[f]
 				}
-				subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\ncheck bounds", f))
+				subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\n%v", f, mode))
 				playbarTex := playbarTexture(s, width, 10, f, len(seq))
 
 				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
@@ -213,7 +243,7 @@ func playbarTexture(s screen.Screen, width, height, frame, lenSeq int) screen.Te
 }
 
 // playFramer return playFrame channel that sends which frame should played at the time.
-func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event) <-chan int {
+func playFramer(mode playMode, fps float64, endFrame int, w screen.Window, eventCh <-chan event) <-chan int {
 	playFrame := make(chan int)
 	go func() {
 		playing := true
@@ -261,14 +291,27 @@ func playFramer(fps float64, endFrame int, w screen.Window, eventCh <-chan event
 					if f > endFrame {
 						f = endFrame
 					}
+				case playRealTimeEvent:
+					mode = playRealTime
+				case playEveryFrameEvent:
+					mode = playEveryFrame
 				}
 			case <-time.After(time.Second / time.Duration(fps)):
 				w.Send(paint.Event{})
 				var tf int
 				if playing {
-					tf = f + int(time.Since(start).Seconds()*fps)
-					if tf > endFrame {
-						tf %= endFrame
+					if mode == playRealTime {
+						tf = f + int(time.Since(start).Seconds()*fps)
+						if tf > endFrame {
+							tf %= endFrame
+						}
+					} else {
+						f++
+						if f > endFrame {
+							f %= endFrame
+						}
+						tf = f
+						start = time.Now()
 					}
 				} else {
 					tf = f
