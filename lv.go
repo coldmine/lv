@@ -52,6 +52,10 @@ const (
 	playEveryFrameEvent
 )
 
+// frameEvent created from playFramer and sended to window.
+// So let window to know current frame is changed and what frame it is.
+type frameEvent int
+
 func main() {
 	driver.Main(func(s screen.Screen) {
 		// Find movie/sequence.
@@ -84,7 +88,7 @@ func main() {
 
 		mode := playRealTime
 		playEventChan := make(chan event)
-		playFrame := playFramer(mode, 24, len(seq)-1, w, playEventChan)
+		go playFramer(mode, 24, len(seq)-1, w, playEventChan)
 
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
@@ -129,8 +133,10 @@ func main() {
 				width, height = e.WidthPx, e.HeightPx
 
 			case paint.Event:
-				f := <-playFrame
+				w.Publish()
 
+			case frameEvent:
+				f := int(e)
 				var tex screen.Texture
 				if texs[f] == nil {
 					img, err := loadImage(seq[f])
@@ -244,84 +250,79 @@ func playbarTexture(s screen.Screen, width, height, frame, lenSeq int) screen.Te
 }
 
 // playFramer return playFrame channel that sends which frame should played at the time.
-func playFramer(mode playMode, fps float64, endFrame int, w screen.Window, eventCh <-chan event) <-chan int {
-	playFrame := make(chan int)
-	go func() {
-		playing := true
-		start := time.Now()
-		var f int
-		for {
-			select {
-			case ev := <-eventCh:
+func playFramer(mode playMode, fps float64, endFrame int, w screen.Window, eventCh <-chan event) {
+	playing := true
+	start := time.Now()
+	var f int
+	for {
+		select {
+		case ev := <-eventCh:
+			if playing {
+				f += int(time.Since(start).Seconds() * fps)
+				if f > endFrame {
+					f %= endFrame
+				}
+			}
+			start = time.Now()
+
+			switch ev {
+			case playPauseEvent:
 				if playing {
-					f += int(time.Since(start).Seconds() * fps)
+					playing = false
+				} else {
+					playing = true
+				}
+			case seekPrevEvent:
+				f -= int(fps) // TODO: rounding for non-integer fps
+				if f < 0 {
+					f = 0
+				}
+			case seekNextEvent:
+				f += int(fps) // TODO: rounding for non-integer fps
+				if f > endFrame {
+					f = endFrame
+				}
+			case seekPrevFrameEvent:
+				// when seeking frames, player should stop.
+				playing = false
+				f -= 1
+				if f < 0 {
+					f = 0
+				}
+			case seekNextFrameEvent:
+				// when seeking frames, player should stop.
+				playing = false
+				f += 1
+				if f > endFrame {
+					f = endFrame
+				}
+			case playRealTimeEvent:
+				mode = playRealTime
+			case playEveryFrameEvent:
+				mode = playEveryFrame
+			}
+		case <-time.After(time.Second / time.Duration(fps)):
+			var tf int
+			if playing {
+				if mode == playRealTime {
+					tf = f + int(time.Since(start).Seconds()*fps)
+					if tf > endFrame {
+						tf %= endFrame
+					}
+				} else {
+					f++
 					if f > endFrame {
 						f %= endFrame
 					}
-				}
-				start = time.Now()
-
-				switch ev {
-				case playPauseEvent:
-					if playing {
-						playing = false
-					} else {
-						playing = true
-					}
-				case seekPrevEvent:
-					f -= int(fps) // TODO: rounding for non-integer fps
-					if f < 0 {
-						f = 0
-					}
-				case seekNextEvent:
-					f += int(fps) // TODO: rounding for non-integer fps
-					if f > endFrame {
-						f = endFrame
-					}
-				case seekPrevFrameEvent:
-					// when seeking frames, player should stop.
-					playing = false
-					f -= 1
-					if f < 0 {
-						f = 0
-					}
-				case seekNextFrameEvent:
-					// when seeking frames, player should stop.
-					playing = false
-					f += 1
-					if f > endFrame {
-						f = endFrame
-					}
-				case playRealTimeEvent:
-					mode = playRealTime
-				case playEveryFrameEvent:
-					mode = playEveryFrame
-				}
-			case <-time.After(time.Second / time.Duration(fps)):
-				w.Send(paint.Event{})
-				var tf int
-				if playing {
-					if mode == playRealTime {
-						tf = f + int(time.Since(start).Seconds()*fps)
-						if tf > endFrame {
-							tf %= endFrame
-						}
-					} else {
-						f++
-						if f > endFrame {
-							f %= endFrame
-						}
-						tf = f
-						start = time.Now()
-					}
-				} else {
 					tf = f
+					start = time.Now()
 				}
-				playFrame <- tf
+			} else {
+				tf = f
 			}
+			w.Send(frameEvent(tf))
 		}
-	}()
-	return playFrame
+	}
 }
 
 func loadImage(pth string) (image.Image, error) {
