@@ -149,6 +149,7 @@ func main() {
 				w.Copy(image.Point{}, tex, tex.Bounds(), screen.Src, nil)
 				w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
 				w.Copy(image.Point{0, height - 10}, playbarTex, playbarTex.Bounds(), screen.Src, nil)
+				w.Scale(image.Rect(0, 0, width, height), tex, tex.Bounds(), screen.Src, nil)
 				w.Publish()
 			}
 		}
