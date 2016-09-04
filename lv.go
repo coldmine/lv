@@ -4,7 +4,6 @@ import "os"
 import "log"
 import "fmt"
 import "time"
-import "path/filepath"
 import "strings"
 import "unicode/utf8"
 import "image"
@@ -58,17 +57,17 @@ type frameEvent int
 
 func main() {
 	driver.Main(func(s screen.Screen) {
-		// Find movie/sequence.
-		//
-		// TODO: User input.
-		seq, err := filepath.Glob("sample/pngseq/pngseq.*.png")
-		if err != nil {
-			log.Fatal(err)
-		}
-		if seq == nil {
-			log.Print("no input movie or sequence")
+		// Find movie/sequence from input.
+		seq := os.Args[1:]
+		if len(seq) == 0 {
+			// TODO: Do not exit even if there is no input.
+			// We should have Open dialog.
+			fmt.Fprintln(os.Stderr, "No input movie or sequence")
+			fmt.Fprintln(os.Stderr, "ex) lv <mov/seq>")
 			os.Exit(1)
 		}
+		// TODO: How could we notice whether input is movie or sequence?
+		// For now, we only support sequence.
 
 		// Get initial size.
 		firstImage, err := loadImage(seq[0])
