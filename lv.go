@@ -87,7 +87,7 @@ func main() {
 
 		mode := playRealTime
 		playEventChan := make(chan event)
-		go playFramer(mode, 24, len(seq)-1, w, playEventChan)
+		go playFramer(mode, 24, len(seq), w, playEventChan)
 
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
@@ -248,7 +248,7 @@ func playbarTexture(s screen.Screen, width, height, frame, lenSeq int) screen.Te
 }
 
 // playFramer return playFrame channel that sends which frame should played at the time.
-func playFramer(mode playMode, fps float64, endFrame int, w screen.Window, eventCh <-chan event) {
+func playFramer(mode playMode, fps float64, seqLen int, w screen.Window, eventCh <-chan event) {
 	playing := true
 	start := time.Now()
 	var f int
@@ -257,8 +257,8 @@ func playFramer(mode playMode, fps float64, endFrame int, w screen.Window, event
 		case ev := <-eventCh:
 			if playing {
 				f += int(time.Since(start).Seconds() * fps)
-				if f > endFrame {
-					f %= endFrame
+				if f >= seqLen {
+					f %= seqLen
 				}
 			}
 			start = time.Now()
@@ -277,8 +277,8 @@ func playFramer(mode playMode, fps float64, endFrame int, w screen.Window, event
 				}
 			case seekNextEvent:
 				f += int(fps) // TODO: rounding for non-integer fps
-				if f > endFrame {
-					f = endFrame
+				if f >= seqLen {
+					f = seqLen - 1
 				}
 			case seekPrevFrameEvent:
 				// when seeking frames, player should stop.
@@ -291,8 +291,8 @@ func playFramer(mode playMode, fps float64, endFrame int, w screen.Window, event
 				// when seeking frames, player should stop.
 				playing = false
 				f += 1
-				if f > endFrame {
-					f = endFrame
+				if f >= seqLen {
+					f = seqLen - 1
 				}
 			case playRealTimeEvent:
 				mode = playRealTime
@@ -300,26 +300,26 @@ func playFramer(mode playMode, fps float64, endFrame int, w screen.Window, event
 				mode = playEveryFrame
 			}
 		case <-time.After(time.Second / time.Duration(fps)):
-			var tf int
-			if playing {
-				if mode == playRealTime {
-					tf = f + int(time.Since(start).Seconds()*fps)
-					if tf > endFrame {
-						tf %= endFrame
-					}
-				} else {
-					f++
-					if f > endFrame {
-						f %= endFrame
-					}
-					tf = f
-					start = time.Now()
+		}
+		var tf int
+		if playing {
+			if mode == playRealTime {
+				tf = f + int(time.Since(start).Seconds()*fps)
+				if tf >= seqLen {
+					tf %= seqLen
 				}
 			} else {
+				f++
+				if f >= seqLen {
+					f %= seqLen
+				}
 				tf = f
+				start = time.Now()
 			}
-			w.Send(frameEvent(tf))
+		} else {
+			tf = f
 		}
+		w.Send(frameEvent(tf))
 	}
 }
 
