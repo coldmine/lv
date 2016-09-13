@@ -16,9 +16,11 @@ import "golang.org/x/mobile/event/lifecycle"
 import "golang.org/x/mobile/event/size"
 import "golang.org/x/mobile/event/paint"
 import "golang.org/x/mobile/event/key"
+import "golang.org/x/mobile/event/mouse"
 import "golang.org/x/image/font"
 import "golang.org/x/image/font/inconsolata"
 import "golang.org/x/image/math/fixed"
+import "golang.org/x/image/math/f64"
 
 type playMode int
 
@@ -89,6 +91,18 @@ func main() {
 		playEventChan := make(chan event)
 		go playFramer(mode, 24, len(seq), w, playEventChan)
 
+		// If user pressing right mouse button,
+		// move mouse right will zoom the image, and left will un-zoom.
+		zooming := false
+		var zoomCenterX float32
+		var zoomCenterY float32
+
+		// var imageScale float32 = 1
+		imageTopLeft := image.Pt(0, 0)
+		imageWidth := float32(width)
+		imageHeight := float32(height)
+		imageRect := image.Rect(0, 0, width, height)
+
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
 
@@ -127,6 +141,38 @@ func main() {
 						playEventChan <- playRealTimeEvent
 					}
 				}
+				if e.Rune == 'f' && e.Direction == key.DirPress {
+					imageRect = image.Rect(0, 0, width, height)
+				}
+
+			case mouse.Event:
+				switch e.Button {
+				case mouse.ButtonRight:
+					if e.Direction == mouse.DirPress {
+						zooming = true
+						zoomCenterX = e.X
+						zoomCenterY = e.Y
+						imageTopLeft = imageRect.Min
+						imageWidth = float32(imageRect.Dx())
+						imageHeight = float32(imageRect.Dy())
+					} else {
+						zooming = false
+					}
+				}
+				if zooming {
+					dx := e.X - float32(zoomCenterX)
+					sc := fit(dx, -100, 300, 0, 4)
+					// TODO: Find good way to prevent zero scaled image.
+					// Maybe we should calculate absolute scale.
+					topLeftOffX := (float32(imageTopLeft.X) - zoomCenterX) * sc
+					topLeftOffY := (float32(imageTopLeft.Y) - zoomCenterY) * sc
+					imageRect = image.Rect(
+						int(zoomCenterX+topLeftOffX),
+						int(zoomCenterY+topLeftOffY),
+						int(zoomCenterX+topLeftOffX+(float32(imageWidth)*sc)),
+						int(zoomCenterY+topLeftOffY+(float32(imageHeight)*sc)),
+					)
+				}
 
 			case size.Event:
 				width, height = e.WidthPx, e.HeightPx
@@ -151,7 +197,8 @@ func main() {
 				subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\n%v", f, mode))
 				playbarTex := playbarTexture(s, width, 10, f, len(seq))
 
-				w.Scale(image.Rect(0, 0, width, height), tex, tex.Bounds(), screen.Src, nil)
+				w.DrawUniform(f64.Aff3{1, 0, 0, 0, 1, 0}, color.Black, image.Rect(0, 0, width, height), screen.Src, nil)
+				w.Scale(imageRect, tex, tex.Bounds(), screen.Src, nil)
 				w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
 				w.Copy(image.Point{0, height - 10}, playbarTex, playbarTex.Bounds(), screen.Src, nil)
 				w.Publish()
