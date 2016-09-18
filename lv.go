@@ -7,7 +7,9 @@ import "time"
 import "strings"
 import "unicode/utf8"
 import "image"
+import _ "image/jpeg"
 import _ "image/png"
+import _ "image/gif"
 import "image/color"
 import "golang.org/x/image/draw"
 import "golang.org/x/exp/shiny/driver"
@@ -97,6 +99,12 @@ func main() {
 		var zoomCenterX float32
 		var zoomCenterY float32
 
+		// If user pressing middle mouse button,
+		// move mouse will pan the image.
+		panning := false
+		var panCenterX float32
+		var panCenterY float32
+
 		// var imageScale float32 = 1
 		imageTopLeft := image.Pt(0, 0)
 		imageWidth := float32(width)
@@ -150,6 +158,7 @@ func main() {
 				case mouse.ButtonRight:
 					if e.Direction == mouse.DirPress {
 						zooming = true
+						panning = false
 						zoomCenterX = e.X
 						zoomCenterY = e.Y
 						imageTopLeft = imageRect.Min
@@ -157,6 +166,16 @@ func main() {
 						imageHeight = float32(imageRect.Dy())
 					} else {
 						zooming = false
+					}
+				case mouse.ButtonMiddle:
+					if e.Direction == mouse.DirPress {
+						panning = true
+						zooming = false
+						panCenterX = e.X
+						panCenterY = e.Y
+						imageTopLeft = imageRect.Min
+					} else {
+						panning = false
 					}
 				}
 				if zooming {
@@ -171,6 +190,15 @@ func main() {
 						int(zoomCenterY+topLeftOffY),
 						int(zoomCenterX+topLeftOffX+(float32(imageWidth)*sc)),
 						int(zoomCenterY+topLeftOffY+(float32(imageHeight)*sc)),
+					)
+				} else if panning {
+					dx := e.X - float32(panCenterX)
+					dy := e.Y - float32(panCenterY)
+					imageRect = image.Rect(
+						imageTopLeft.X+int(dx),
+						imageTopLeft.Y+int(dy),
+						imageTopLeft.X+int(dx)+imageRect.Dx(),
+						imageTopLeft.Y+int(dy)+imageRect.Dy(),
 					)
 				}
 
