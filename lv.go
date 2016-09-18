@@ -1,6 +1,7 @@
 package main
 
 import "os"
+import "flag"
 import "log"
 import "fmt"
 import "time"
@@ -60,19 +61,23 @@ const (
 type frameEvent int
 
 func main() {
-	driver.Main(func(s screen.Screen) {
-		// Find movie/sequence from input.
-		seq := os.Args[1:]
-		if len(seq) == 0 {
-			// TODO: Do not exit even if there is no input.
-			// We should have Open dialog.
-			fmt.Fprintln(os.Stderr, "No input movie or sequence")
-			fmt.Fprintln(os.Stderr, "ex) lv <mov/seq>")
-			os.Exit(1)
-		}
-		// TODO: How could we notice whether input is movie or sequence?
-		// For now, we only support sequence.
+	var fps float64
+	flag.Float64Var(&fps, "fps", 24, "play frame per second")
+	flag.Parse()
 
+	// Find movie/sequence from input.
+	seq := flag.Args()
+	if len(seq) == 0 {
+		// TODO: Do not exit even if there is no input.
+		// We should have Open dialog.
+		fmt.Fprintln(os.Stderr, "Usage: lv [-flag] <mov/seq>")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+	// TODO: How could we notice whether input is movie or sequence?
+	// For now, we only support sequence.
+
+	driver.Main(func(s screen.Screen) {
 		// Get initial size.
 		firstImage, err := loadImage(seq[0])
 		if err != nil {
@@ -91,7 +96,7 @@ func main() {
 
 		mode := playRealTime
 		playEventChan := make(chan event)
-		go playFramer(mode, 24, len(seq), w, playEventChan)
+		go playFramer(mode, fps, len(seq), w, playEventChan)
 
 		// If user pressing right mouse button,
 		// move mouse right will zoom the image, and left will un-zoom.
