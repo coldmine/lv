@@ -198,15 +198,12 @@ func main() {
 						}
 						topLeftOffX := (float32(imageTopLeft.X) - zoomCenterX) * z
 						topLeftOffY := (float32(imageTopLeft.Y) - zoomCenterY) * z
-						fmt.Println(zoomCenterX + topLeftOffX)
-						fmt.Println(zoomCenterY + topLeftOffY)
 						imageRect = image.Rect(
 							int(zoomCenterX+topLeftOffX),
 							int(zoomCenterY+topLeftOffY),
 							int(zoomCenterX+topLeftOffX+(float32(imageWidth)*zoomScale*z)),
 							int(zoomCenterY+topLeftOffY+(float32(imageHeight)*zoomScale*z)),
 						)
-						fmt.Println(imageRect)
 					} else if panning {
 						dx := e.X - float32(panCenterX)
 						dy := e.Y - float32(panCenterY)
