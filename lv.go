@@ -131,7 +131,7 @@ func main() {
 				}
 
 			case key.Event:
-				if e.Code == key.CodeEscape {
+				if e.Code == key.CodeEscape || e.Rune == 'q' {
 					return
 				}
 				if e.Code == key.CodeSpacebar && e.Direction == key.DirPress {
