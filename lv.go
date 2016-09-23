@@ -113,7 +113,6 @@ func main() {
 		var panCenterX float32
 		var panCenterY float32
 
-		// var imageScale float32 = 1
 		imageTopLeft := image.Pt(0, 0)
 		imageWidth := float32(width)
 		imageHeight := float32(height)
@@ -193,7 +192,7 @@ func main() {
 						dx := e.X - zoomCenterX
 						z := fit(dx, -100, 300, 0, 4)
 						if zoomScale*z < 0.1 {
-							// make zoomScale always bigger or equal than 1.
+							// make zoomScale always bigger or equal than 0.1
 							z = 0.1 / zoomScale
 						}
 						topLeftOffX := (float32(imageTopLeft.X) - zoomCenterX) * z
