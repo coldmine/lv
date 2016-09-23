@@ -121,6 +121,8 @@ func main() {
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
 
+		drawFrame := 0
+
 		for {
 			switch e := w.NextEvent().(type) {
 			case lifecycle.Event:
@@ -218,32 +220,35 @@ func main() {
 			case size.Event:
 				width, height = e.WidthPx, e.HeightPx
 
-			case paint.Event:
-				w.Publish()
-
 			case frameEvent:
-				f := int(e)
-				var tex screen.Texture
-				if texs[f] == nil {
-					img, err := loadImage(seq[f])
-					if err != nil {
-						log.Fatal(err)
-					}
-					tex = imageTexture(s, img)
-					texs[f] = tex
-				} else {
-					// loop
-					tex = texs[f]
-				}
-				subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\n%v", f, mode))
-				playbarTex := playbarTexture(s, width, 10, f, len(seq))
+				drawFrame = int(e)
 
-				w.DrawUniform(f64.Aff3{1, 0, 0, 0, 1, 0}, color.Black, image.Rect(0, 0, width, height), screen.Src, nil)
-				w.Scale(imageRect, tex, tex.Bounds(), screen.Src, nil)
-				w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
-				w.Copy(image.Point{0, height - 10}, playbarTex, playbarTex.Bounds(), screen.Src, nil)
-				w.Publish()
+			case paint.Event:
+				// Will paint after select statement. See below.
 			}
+
+			// After every event, we should redraw the window.
+			var tex screen.Texture
+			if texs[drawFrame] == nil {
+				img, err := loadImage(seq[drawFrame])
+				if err != nil {
+					log.Fatal(err)
+				}
+				tex = imageTexture(s, img)
+				texs[drawFrame] = tex
+			} else {
+				// loop
+				tex = texs[drawFrame]
+			}
+
+			subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\n%v", drawFrame, mode))
+			playbarTex := playbarTexture(s, width, 10, drawFrame, len(seq))
+
+			w.DrawUniform(f64.Aff3{1, 0, 0, 0, 1, 0}, color.Black, image.Rect(0, 0, width, height), screen.Src, nil)
+			w.Scale(imageRect, tex, tex.Bounds(), screen.Src, nil)
+			w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
+			w.Copy(image.Point{0, height - 10}, playbarTex, playbarTex.Bounds(), screen.Src, nil)
+			w.Publish()
 		}
 	})
 }
@@ -389,23 +394,22 @@ func playFramer(mode playMode, fps float64, seqLen int, w screen.Window, eventCh
 			}
 		case <-time.After(time.Second / time.Duration(fps)):
 		}
+		if !playing {
+			continue
+		}
 		var tf int
-		if playing {
-			if mode == playRealTime {
-				tf = f + int(time.Since(start).Seconds()*fps)
-				if tf >= seqLen {
-					tf %= seqLen
-				}
-			} else {
-				f++
-				if f >= seqLen {
-					f %= seqLen
-				}
-				tf = f
-				start = time.Now()
+		if mode == playRealTime {
+			tf = f + int(time.Since(start).Seconds()*fps)
+			if tf >= seqLen {
+				tf %= seqLen
 			}
 		} else {
+			f++
+			if f >= seqLen {
+				f %= seqLen
+			}
 			tf = f
+			start = time.Now()
 		}
 		w.Send(frameEvent(tf))
 	}
