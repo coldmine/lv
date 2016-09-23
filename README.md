@@ -1,9 +1,7 @@
 # LV
 Lv is light viewer.
 
-## Instruction for developers
-
-### Git Install
+### Git
 
 If your OS is Windows, you need to install Git Windows. (If you don't have already.)
 
@@ -17,16 +15,17 @@ For other OS, I expect you have it.
 Type `git` in terminal for check.
 
 
-### Go Install
+### Go
 
 Download go from https://golang.org/dl/
 
 Follow the installation steps. then,
 
-```
-$ go get github.com/coldmine/lv
-$ cd $GOPATH/src/github.com/coldmine/lv
-```
+### Run lv
 
-Now, dig it!
+```
+$ go get github.com/coldmine/lv # will also automatically install lv to $GOPATH/bin
+$ cd $GOPATH/src/github.com/coldmine/lv
+$ lv sample/pngseq/*
+```
 
