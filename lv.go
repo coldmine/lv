@@ -1,6 +1,7 @@
 package main
 
 import "os"
+import "flag"
 import "log"
 import "fmt"
 import "time"
@@ -60,19 +61,23 @@ const (
 type frameEvent int
 
 func main() {
-	driver.Main(func(s screen.Screen) {
-		// Find movie/sequence from input.
-		seq := os.Args[1:]
-		if len(seq) == 0 {
-			// TODO: Do not exit even if there is no input.
-			// We should have Open dialog.
-			fmt.Fprintln(os.Stderr, "No input movie or sequence")
-			fmt.Fprintln(os.Stderr, "ex) lv <mov/seq>")
-			os.Exit(1)
-		}
-		// TODO: How could we notice whether input is movie or sequence?
-		// For now, we only support sequence.
+	var fps float64
+	flag.Float64Var(&fps, "fps", 24, "play frame per second")
+	flag.Parse()
 
+	// Find movie/sequence from input.
+	seq := flag.Args()
+	if len(seq) == 0 {
+		// TODO: Do not exit even if there is no input.
+		// We should have Open dialog.
+		fmt.Fprintln(os.Stderr, "Usage: lv [-flag] <mov/seq>")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+	// TODO: How could we notice whether input is movie or sequence?
+	// For now, we only support sequence.
+
+	driver.Main(func(s screen.Screen) {
 		// Get initial size.
 		firstImage, err := loadImage(seq[0])
 		if err != nil {
@@ -91,13 +96,14 @@ func main() {
 
 		mode := playRealTime
 		playEventChan := make(chan event)
-		go playFramer(mode, 24, len(seq), w, playEventChan)
+		go playFramer(mode, fps, len(seq), w, playEventChan)
 
 		// If user pressing right mouse button,
 		// move mouse right will zoom the image, and left will un-zoom.
 		zooming := false
 		var zoomCenterX float32
 		var zoomCenterY float32
+		var zoomScale float32 = 1
 
 		// If user pressing middle mouse button,
 		// move mouse will pan the image.
@@ -162,10 +168,13 @@ func main() {
 						zoomCenterX = e.X
 						zoomCenterY = e.Y
 						imageTopLeft = imageRect.Min
-						imageWidth = float32(imageRect.Dx())
-						imageHeight = float32(imageRect.Dy())
 					} else {
 						zooming = false
+						dx := e.X - zoomCenterX
+						zoomScale *= fit(dx, -100, 300, 0, 4)
+						if zoomScale < 0.1 {
+							zoomScale = 0.1
+						}
 					}
 				case mouse.ButtonMiddle:
 					if e.Direction == mouse.DirPress {
@@ -177,29 +186,35 @@ func main() {
 					} else {
 						panning = false
 					}
-				}
-				if zooming {
-					dx := e.X - float32(zoomCenterX)
-					sc := fit(dx, -100, 300, 0, 4)
-					// TODO: Find good way to prevent zero scaled image.
-					// Maybe we should calculate absolute scale.
-					topLeftOffX := (float32(imageTopLeft.X) - zoomCenterX) * sc
-					topLeftOffY := (float32(imageTopLeft.Y) - zoomCenterY) * sc
-					imageRect = image.Rect(
-						int(zoomCenterX+topLeftOffX),
-						int(zoomCenterY+topLeftOffY),
-						int(zoomCenterX+topLeftOffX+(float32(imageWidth)*sc)),
-						int(zoomCenterY+topLeftOffY+(float32(imageHeight)*sc)),
-					)
-				} else if panning {
-					dx := e.X - float32(panCenterX)
-					dy := e.Y - float32(panCenterY)
-					imageRect = image.Rect(
-						imageTopLeft.X+int(dx),
-						imageTopLeft.Y+int(dy),
-						imageTopLeft.X+int(dx)+imageRect.Dx(),
-						imageTopLeft.Y+int(dy)+imageRect.Dy(),
-					)
+				case mouse.ButtonNone:
+					if zooming {
+						dx := e.X - zoomCenterX
+						z := fit(dx, -100, 300, 0, 4)
+						if zoomScale*z < 0.1 {
+							// make zoomScale always bigger or equal than 1.
+							z = 0.1 / zoomScale
+						}
+						topLeftOffX := (float32(imageTopLeft.X) - zoomCenterX) * z
+						topLeftOffY := (float32(imageTopLeft.Y) - zoomCenterY) * z
+						fmt.Println(zoomCenterX + topLeftOffX)
+						fmt.Println(zoomCenterY + topLeftOffY)
+						imageRect = image.Rect(
+							int(zoomCenterX+topLeftOffX),
+							int(zoomCenterY+topLeftOffY),
+							int(zoomCenterX+topLeftOffX+(float32(imageWidth)*zoomScale*z)),
+							int(zoomCenterY+topLeftOffY+(float32(imageHeight)*zoomScale*z)),
+						)
+						fmt.Println(imageRect)
+					} else if panning {
+						dx := e.X - float32(panCenterX)
+						dy := e.Y - float32(panCenterY)
+						imageRect = image.Rect(
+							imageTopLeft.X+int(dx),
+							imageTopLeft.Y+int(dy),
+							imageTopLeft.X+int(dx)+imageRect.Dx(),
+							imageTopLeft.Y+int(dy)+imageRect.Dy(),
+						)
+					}
 				}
 
 			case size.Event:
