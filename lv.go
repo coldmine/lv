@@ -1,29 +1,31 @@
 package main
 
-import "os"
-import "flag"
-import "log"
-import "fmt"
-import "time"
-import "strings"
-import "unicode/utf8"
-import "image"
-import _ "image/jpeg"
-import _ "image/png"
-import _ "image/gif"
-import "image/color"
-import "golang.org/x/image/draw"
-import "golang.org/x/exp/shiny/driver"
-import "golang.org/x/exp/shiny/screen"
-import "golang.org/x/mobile/event/lifecycle"
-import "golang.org/x/mobile/event/size"
-import "golang.org/x/mobile/event/paint"
-import "golang.org/x/mobile/event/key"
-import "golang.org/x/mobile/event/mouse"
-import "golang.org/x/image/font"
-import "golang.org/x/image/font/inconsolata"
-import "golang.org/x/image/math/fixed"
-import "golang.org/x/image/math/f64"
+import (
+	"flag"
+	"fmt"
+	"golang.org/x/exp/shiny/driver"
+	"golang.org/x/exp/shiny/screen"
+	"golang.org/x/image/draw"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/inconsolata"
+	"golang.org/x/image/math/f64"
+	"golang.org/x/image/math/fixed"
+	"golang.org/x/mobile/event/key"
+	"golang.org/x/mobile/event/lifecycle"
+	"golang.org/x/mobile/event/mouse"
+	"golang.org/x/mobile/event/paint"
+	"golang.org/x/mobile/event/size"
+	"image"
+	"image/color"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"log"
+	"os"
+	"strings"
+	"time"
+	"unicode/utf8"
+)
 
 type playMode int
 
@@ -111,7 +113,6 @@ func main() {
 		var panCenterX float32
 		var panCenterY float32
 
-		// var imageScale float32 = 1
 		imageTopLeft := image.Pt(0, 0)
 		imageWidth := float32(width)
 		imageHeight := float32(height)
@@ -119,6 +120,8 @@ func main() {
 
 		// Keep textures so we can reuse it. (ex: play loop)
 		texs := make([]screen.Texture, len(seq))
+
+		drawFrame := 0
 
 		for {
 			switch e := w.NextEvent().(type) {
@@ -128,7 +131,7 @@ func main() {
 				}
 
 			case key.Event:
-				if e.Code == key.CodeEscape {
+				if e.Code == key.CodeEscape || e.Rune == 'q' {
 					return
 				}
 				if e.Code == key.CodeSpacebar && e.Direction == key.DirPress {
@@ -191,20 +194,17 @@ func main() {
 						dx := e.X - zoomCenterX
 						z := fit(dx, -100, 300, 0, 4)
 						if zoomScale*z < 0.1 {
-							// make zoomScale always bigger or equal than 1.
+							// make zoomScale always bigger or equal than 0.1
 							z = 0.1 / zoomScale
 						}
 						topLeftOffX := (float32(imageTopLeft.X) - zoomCenterX) * z
 						topLeftOffY := (float32(imageTopLeft.Y) - zoomCenterY) * z
-						fmt.Println(zoomCenterX + topLeftOffX)
-						fmt.Println(zoomCenterY + topLeftOffY)
 						imageRect = image.Rect(
 							int(zoomCenterX+topLeftOffX),
 							int(zoomCenterY+topLeftOffY),
 							int(zoomCenterX+topLeftOffX+(float32(imageWidth)*zoomScale*z)),
 							int(zoomCenterY+topLeftOffY+(float32(imageHeight)*zoomScale*z)),
 						)
-						fmt.Println(imageRect)
 					} else if panning {
 						dx := e.X - float32(panCenterX)
 						dy := e.Y - float32(panCenterY)
@@ -220,32 +220,35 @@ func main() {
 			case size.Event:
 				width, height = e.WidthPx, e.HeightPx
 
-			case paint.Event:
-				w.Publish()
-
 			case frameEvent:
-				f := int(e)
-				var tex screen.Texture
-				if texs[f] == nil {
-					img, err := loadImage(seq[f])
-					if err != nil {
-						log.Fatal(err)
-					}
-					tex = imageTexture(s, img)
-					texs[f] = tex
-				} else {
-					// loop
-					tex = texs[f]
-				}
-				subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\n%v", f, mode))
-				playbarTex := playbarTexture(s, width, 10, f, len(seq))
+				drawFrame = int(e)
 
-				w.DrawUniform(f64.Aff3{1, 0, 0, 0, 1, 0}, color.Black, image.Rect(0, 0, width, height), screen.Src, nil)
-				w.Scale(imageRect, tex, tex.Bounds(), screen.Src, nil)
-				w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
-				w.Copy(image.Point{0, height - 10}, playbarTex, playbarTex.Bounds(), screen.Src, nil)
-				w.Publish()
+			case paint.Event:
+				// Will paint after select statement. See below.
 			}
+
+			// After every event, we should redraw the window.
+			var tex screen.Texture
+			if texs[drawFrame] == nil {
+				img, err := loadImage(seq[drawFrame])
+				if err != nil {
+					log.Fatal(err)
+				}
+				tex = imageTexture(s, img)
+				texs[drawFrame] = tex
+			} else {
+				// loop
+				tex = texs[drawFrame]
+			}
+
+			subTex := subtitleTexture(s, fmt.Sprintf("play frame: %v\n\n%v", drawFrame, mode))
+			playbarTex := playbarTexture(s, width, 10, drawFrame, len(seq))
+
+			w.DrawUniform(f64.Aff3{1, 0, 0, 0, 1, 0}, color.Black, image.Rect(0, 0, width, height), screen.Src, nil)
+			w.Scale(imageRect, tex, tex.Bounds(), screen.Src, nil)
+			w.Copy(image.Point{0, 0}, subTex, subTex.Bounds(), screen.Over, nil)
+			w.Copy(image.Point{0, height - 10}, playbarTex, playbarTex.Bounds(), screen.Src, nil)
+			w.Publish()
 		}
 	})
 }
@@ -391,23 +394,22 @@ func playFramer(mode playMode, fps float64, seqLen int, w screen.Window, eventCh
 			}
 		case <-time.After(time.Second / time.Duration(fps)):
 		}
+		if !playing {
+			continue
+		}
 		var tf int
-		if playing {
-			if mode == playRealTime {
-				tf = f + int(time.Since(start).Seconds()*fps)
-				if tf >= seqLen {
-					tf %= seqLen
-				}
-			} else {
-				f++
-				if f >= seqLen {
-					f %= seqLen
-				}
-				tf = f
-				start = time.Now()
+		if mode == playRealTime {
+			tf = f + int(time.Since(start).Seconds()*fps)
+			if tf >= seqLen {
+				tf %= seqLen
 			}
 		} else {
+			f++
+			if f >= seqLen {
+				f %= seqLen
+			}
 			tf = f
+			start = time.Now()
 		}
 		w.Send(frameEvent(tf))
 	}
