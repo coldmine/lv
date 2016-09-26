@@ -106,6 +106,7 @@ func main() {
 		var zoomCenterX float32
 		var zoomCenterY float32
 		var zoomScale float32 = 1
+		var lastZoomScale float32 = 1
 
 		// If user pressing middle mouse button,
 		// move mouse will pan the image.
@@ -113,7 +114,10 @@ func main() {
 		var panCenterX float32
 		var panCenterY float32
 
-		imageTopLeft := image.Pt(0, 0)
+		var imageTopLeftX float32 = 0
+		var imageTopLeftY float32 = 0
+		var lastImageTopLeftX float32 = 0
+		var lastImageTopLeftY float32 = 0
 		imageWidth := float32(width)
 		imageHeight := float32(height)
 		imageRect := image.Rect(0, 0, width, height)
@@ -170,14 +174,11 @@ func main() {
 						panning = false
 						zoomCenterX = e.X
 						zoomCenterY = e.Y
-						imageTopLeft = imageRect.Min
+						lastZoomScale = zoomScale
+						lastImageTopLeftX = imageTopLeftX
+						lastImageTopLeftY = imageTopLeftY
 					} else {
 						zooming = false
-						dx := e.X - zoomCenterX
-						zoomScale *= fit(dx, -100, 300, 0, 4)
-						if zoomScale < 0.1 {
-							zoomScale = 0.1
-						}
 					}
 				case mouse.ButtonMiddle:
 					if e.Direction == mouse.DirPress {
@@ -185,35 +186,25 @@ func main() {
 						zooming = false
 						panCenterX = e.X
 						panCenterY = e.Y
-						imageTopLeft = imageRect.Min
+						lastImageTopLeftX = imageTopLeftX
+						lastImageTopLeftY = imageTopLeftY
 					} else {
 						panning = false
 					}
-				case mouse.ButtonNone:
+				case mouse.ButtonNone: // Mouse moving
 					if zooming {
 						dx := e.X - zoomCenterX
 						z := fit(dx, -100, 300, 0, 4)
-						if zoomScale*z < 0.1 {
-							// make zoomScale always bigger or equal than 0.1
-							z = 0.1 / zoomScale
+						if lastZoomScale*z < 0.1 {
+							// Make zoomScale always bigger or equal than 0.1
+							z = 0.1 / lastZoomScale
 						}
-						topLeftOffX := (float32(imageTopLeft.X) - zoomCenterX) * z
-						topLeftOffY := (float32(imageTopLeft.Y) - zoomCenterY) * z
-						imageRect = image.Rect(
-							int(zoomCenterX+topLeftOffX),
-							int(zoomCenterY+topLeftOffY),
-							int(zoomCenterX+topLeftOffX+(float32(imageWidth)*zoomScale*z)),
-							int(zoomCenterY+topLeftOffY+(float32(imageHeight)*zoomScale*z)),
-						)
+						imageTopLeftX = (lastImageTopLeftX-zoomCenterX)*z + zoomCenterX
+						imageTopLeftY = (lastImageTopLeftY-zoomCenterY)*z + zoomCenterY
+						zoomScale = lastZoomScale * z
 					} else if panning {
-						dx := e.X - float32(panCenterX)
-						dy := e.Y - float32(panCenterY)
-						imageRect = image.Rect(
-							imageTopLeft.X+int(dx),
-							imageTopLeft.Y+int(dy),
-							imageTopLeft.X+int(dx)+imageRect.Dx(),
-							imageTopLeft.Y+int(dy)+imageRect.Dy(),
-						)
+						imageTopLeftX = lastImageTopLeftX + (e.X - panCenterX)
+						imageTopLeftY = lastImageTopLeftY + (e.Y - panCenterY)
 					}
 				}
 
@@ -228,6 +219,13 @@ func main() {
 			}
 
 			// After every event, we should redraw the window.
+			imageRect = image.Rect(
+				int(imageTopLeftX),
+				int(imageTopLeftY),
+				int(imageTopLeftX)+int(imageWidth*zoomScale),
+				int(imageTopLeftY)+int(imageHeight*zoomScale),
+			)
+
 			var tex screen.Texture
 			if texs[drawFrame] == nil {
 				img, err := loadImage(seq[drawFrame])
