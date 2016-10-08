@@ -3,6 +3,17 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image"
+	"image/color"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"log"
+	"os"
+	"strings"
+	"time"
+	"unicode/utf8"
+
 	"golang.org/x/exp/shiny/driver"
 	"golang.org/x/exp/shiny/screen"
 	"golang.org/x/image/draw"
@@ -15,16 +26,6 @@ import (
 	"golang.org/x/mobile/event/mouse"
 	"golang.org/x/mobile/event/paint"
 	"golang.org/x/mobile/event/size"
-	"image"
-	"image/color"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-	"log"
-	"os"
-	"strings"
-	"time"
-	"unicode/utf8"
 )
 
 type playMode int
@@ -391,9 +392,9 @@ func playFramer(mode playMode, fps float64, seqLen int, w screen.Window, eventCh
 				mode = playEveryFrame
 			}
 		case <-time.After(time.Second / time.Duration(fps)):
-		}
-		if !playing {
-			continue
+			if !playing {
+				continue
+			}
 		}
 		var tf int
 		if mode == playRealTime {
