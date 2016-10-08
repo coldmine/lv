@@ -392,9 +392,9 @@ func playFramer(mode playMode, fps float64, seqLen int, w screen.Window, eventCh
 				mode = playEveryFrame
 			}
 		case <-time.After(time.Second / time.Duration(fps)):
-		}
-		if !playing {
-			continue
+			if !playing {
+				continue
+			}
 		}
 		var tf int
 		if mode == playRealTime {
