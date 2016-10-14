@@ -164,7 +164,14 @@ func main() {
 					}
 				}
 				if e.Rune == 'f' && e.Direction == key.DirPress {
-					imageRect = image.Rect(0, 0, width, height)
+					xz := float32(width) / imageWidth
+					yz := float32(height) / imageHeight
+					zoomScale = xz
+					if yz < xz {
+						zoomScale = yz
+					}
+					imageTopLeftX = (float32(width) - (imageWidth * zoomScale)) / 2
+					imageTopLeftY = (float32(height) - (imageHeight * zoomScale)) / 2
 				}
 
 			case mouse.Event:
