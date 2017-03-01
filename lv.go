@@ -87,27 +87,35 @@ func main() {
 			log.Fatal(err)
 		}
 		initSize := firstImage.Bounds().Max
-		width := initSize.X
-		height := initSize.Y
+		var initWidth = float32(initSize.X)
+		var initHeight = float32(initSize.Y)
 
 		// Make a window.
+		width := initSize.X
+		height := initSize.Y
 		w, err := s.NewWindow(&screen.NewWindowOptions{Width: width, Height: height})
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer w.Release()
+		var winScale float32 = 1
 
 		mode := playRealTime
 		playEventChan := make(chan event)
 		go playFramer(mode, fps, len(seq), w, playEventChan)
 
+		// box is an area holds image. It preserves image ratio.
+		var boxScale float32 = 1
+		var boxOffX float32 // when 0.5, only left-half of image will showing.
+		var boxOffY float32 // when 0.5, only top-half of image will showing.
+
 		// If user pressing right mouse button,
 		// move mouse right will zoom the image, and left will un-zoom.
 		zooming := false
 		var zoomCenterX float32
-		var zoomCenterY float32
-		var zoomScale float32 = 1
-		var lastZoomScale float32 = 1
+
+		// lastBoxScale keep box scale when zooming.
+		var lastBoxScale float32 = 1
 
 		// If user pressing middle mouse button,
 		// move mouse will pan the image.
@@ -115,12 +123,10 @@ func main() {
 		var panCenterX float32
 		var panCenterY float32
 
-		var imageTopLeftX float32 = 0
-		var imageTopLeftY float32 = 0
-		var lastImageTopLeftX float32 = 0
-		var lastImageTopLeftY float32 = 0
-		imageWidth := float32(width)
-		imageHeight := float32(height)
+		// lastBoxOff[XY] keep box offsets when panning.
+		var lastBoxOffX float32
+		var lastBoxOffY float32
+
 		imageRect := image.Rect(0, 0, width, height)
 
 		// Keep textures so we can reuse it. (ex: play loop)
@@ -169,26 +175,25 @@ func main() {
 
 			case mouse.Event:
 				switch e.Button {
-				case mouse.ButtonRight:
+				case mouse.ButtonRight: // zoom
 					if e.Direction == mouse.DirPress {
 						zooming = true
 						panning = false
 						zoomCenterX = e.X
-						zoomCenterY = e.Y
-						lastZoomScale = zoomScale
-						lastImageTopLeftX = imageTopLeftX
-						lastImageTopLeftY = imageTopLeftY
+						lastBoxScale = boxScale
+						lastBoxOffX = boxOffX
+						lastBoxOffY = boxOffY
 					} else {
 						zooming = false
 					}
-				case mouse.ButtonMiddle:
+				case mouse.ButtonMiddle: // pan
 					if e.Direction == mouse.DirPress {
 						panning = true
 						zooming = false
 						panCenterX = e.X
 						panCenterY = e.Y
-						lastImageTopLeftX = imageTopLeftX
-						lastImageTopLeftY = imageTopLeftY
+						lastBoxOffX = boxOffX
+						lastBoxOffY = boxOffY
 					} else {
 						panning = false
 					}
@@ -196,21 +201,29 @@ func main() {
 					if zooming {
 						dx := e.X - zoomCenterX
 						z := fit(dx, -100, 300, 0, 4)
-						if lastZoomScale*z < 0.1 {
-							// Make zoomScale always bigger or equal than 0.1
-							z = 0.1 / lastZoomScale
+						if lastBoxScale*z < 0.1 {
+							// Make boxScale always bigger or equal than 0.1
+							z = 0.1 / lastBoxScale
 						}
-						imageTopLeftX = (lastImageTopLeftX-zoomCenterX)*z + zoomCenterX
-						imageTopLeftY = (lastImageTopLeftY-zoomCenterY)*z + zoomCenterY
-						zoomScale = lastZoomScale * z
+						boxOffX = lastBoxOffX * z
+						boxOffY = lastBoxOffY * z
+						boxScale = lastBoxScale * z
 					} else if panning {
-						imageTopLeftX = lastImageTopLeftX + (e.X - panCenterX)
-						imageTopLeftY = lastImageTopLeftY + (e.Y - panCenterY)
+						dx := e.X - panCenterX
+						dy := e.Y - panCenterY
+						boxOffX = lastBoxOffX + dx/initWidth/winScale
+						boxOffY = lastBoxOffY + dy/initHeight/winScale
 					}
 				}
 
 			case size.Event:
 				width, height = e.WidthPx, e.HeightPx
+				ws := float32(width) / float32(initSize.X)
+				hs := float32(height) / float32(initSize.Y)
+				winScale = ws
+				if hs < ws {
+					winScale = hs
+				}
 
 			case frameEvent:
 				drawFrame = int(e)
@@ -221,10 +234,10 @@ func main() {
 
 			// After every event, we should redraw the window.
 			imageRect = image.Rect(
-				int(imageTopLeftX),
-				int(imageTopLeftY),
-				int(imageTopLeftX)+int(imageWidth*zoomScale),
-				int(imageTopLeftY)+int(imageHeight*zoomScale),
+				int((0.5+boxOffX-boxScale*0.5)*initWidth*winScale),
+				int((0.5+boxOffY-boxScale*0.5)*initHeight*winScale),
+				int((0.5+boxOffX+boxScale*0.5)*initWidth*winScale),
+				int((0.5+boxOffY+boxScale*0.5)*initHeight*winScale),
 			)
 
 			var tex screen.Texture
