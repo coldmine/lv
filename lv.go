@@ -218,8 +218,8 @@ func main() {
 
 			case size.Event:
 				width, height = e.WidthPx, e.HeightPx
-				ws := float32(width) / float32(initSize.X)
-				hs := float32(height) / float32(initSize.Y)
+				ws := float32(width) / initWidth
+				hs := float32(height) / initHeight
 				winScale = ws
 				if hs < ws {
 					winScale = hs
