@@ -1,6 +1,6 @@
 module github.com/coldmine/lv
 
-go 1.13
+go 1.12
 
 require (
 	golang.org/x/exp v0.0.0-20190509005604-ec0fef3eb65a
